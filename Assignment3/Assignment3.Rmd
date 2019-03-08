@@ -1,0 +1,118 @@
+---
+title: "MA677-Assignment3"
+author: "Stella Li"
+date: "3/4/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Hmisc)
+```
+
+1.Maybe Uniform  
+(a) Check Unif(0,1)
+```{r warning=FALSE}
+q1 <- read.table("maybe_uniform.txt");q1 <- unlist(q1)
+hist(q1)
+ks.test(q1, "punif")
+```
+Taking a look at the histogram and the KS test result, it seems that the data is not from uniform distribution. 
+  
+(b) Check new model
+```{r}
+q1_d <- ecdf(q1)
+tr_d <- rep(0, 12)
+for(i in 1:25) tr_d[i] = ifelse(q1[i] < .5, 1.5*q1[i], .75+(q1[i]-.5)*.5)
+max(abs(q1_d(q1) - tr_d))
+```
+The calculated D is 0.11, less than the D from Uniform distribution. Therefore, the new distribution is better.  
+
+(c) Try a gamma distribution with rate = 2 and shape = 1.
+```{r}  
+ks.test(q1, "pgamma", rate = 2, shape = 1)  
+```
+The result shows that this is better than the uniform distribution, but not as good as the model in (b)   
+  
+2. Maybe normal
+```{r warning=FALSE}
+q2 <- read.table("maybe_normal.txt");q2 <- unlist(q2)
+hist(q2)
+qqnorm(q2)
+ks.test(q2, "pnorm", mean = 26, sd = sqrt(4))
+```
+It is very likely that the data is from normal distribution with mean = 26 and variance = 4.  
+  
+3. Maybe same
+```{r warning = FALSE}
+q3_1 <- read.table("maybe_same_1.txt"); q3_1 <- unlist(q3_1)
+q3_2 <- read.table("maybe_same_2.txt"); q3_2 <- unlist(q3_2)
+hist(q3_1)
+hist(q3_2)
+plot(ecdf(q3_1), main = "ECDF"); plot(ecdf(q3_2), add = T, col = "blue")
+ks.test(q3_1, q3_2)
+```
+Based on the histograms and test result, these two sets of data do not come from the same distribution.  
+  
+```{r warining = FALSE}
+q3_3 <- q3_1 + 2
+plot(ecdf(q3_3), main = "ECDF"); plot(ecdf(q3_2), add = T, col = "blue")
+hist(q3_3)
+ks.test(q3_3, q3_2)
+```
+This time, we cannot reject the null hypothesis that X + 2 and Y do not come from the same distribution. However, by taking a look at the histograms, it seems that X + 2 and Y have very different density distribution.  
+  
+4. Normal data
+```{r warning=FALSE}
+q4 <- readRDS("norm_sample.Rdata")
+q4 <- as.data.frame(q4); colnames(q4) <- "x"
+q4_d <- ecdf(q4$x)
+q4$ecdf <- q4_d(q4$x)
+q4$nm <- pnorm(q4$x)
+q4$D <- q4$ecdf - q4$nm
+max(abs(q4$D))
+ks.test(q4$x, "pnorm", mean = 0, sd = 1)
+```
+Based on the test result, we fail to reject the hypothesis that the data are drawn from standard normal distribution.  
+The D statistics from ks.test() function is a little larger than the D we calculated.  
+  
+5. Fiji and Faithful data
+```{r warning=FALSE}
+#fiji
+fiji <- read.table("fijiquakes.dat", header = T)
+fiji_d <- ecdf(fiji$mag)
+print(diff_mean <- fiji_d(4.9) - fiji_d(4.3))
+n <- length(fiji$mag)
+alpha <- .05
+epsl <- sqrt(log(2/alpha)/n/2)
+r<-max(fiji$mag) - min(fiji$mag)
+grid<-seq(from=min(fiji$mag)-0.01*r,to=max(fiji$mag)+0.01*r,l=1000)
+low.cdf<-pmax(fiji_d(grid)-epsl,0)
+up.cdf<-pmin(fiji_d(grid)+epsl,1)
+plot(fiji_d, main = "ecdf for magnitude");lines(grid,low.cdf,col="red");lines(grid,up.cdf,col="red")
+### 95% confidence interval for F(4.9) - F(4.3)
+
+tot<-sum((fiji$mag<=4.9) & (fiji$mag>4.3))
+binconf(tot,length(fiji$mag),method="wilson",alpha)
+
+#-------------------------------------------------------------------
+#faithful
+faithful <- read.table("faithful.dat", header = T, skip = 25)
+f_d <- ecdf(faithful$waiting)
+n <- length(faithful$waiting)
+alpha <- .1
+epsl <- sqrt(log(2/alpha)/n/2)
+r<-max(faithful)-min(faithful)
+grid<-seq(from=min(faithful)-0.01*r,to=max(faithful)+0.01*r,l=1000)
+low.cdf<-pmax(f_d(grid)-epsl,0)
+up.cdf<-pmin(f_d(grid)+epsl,1)
+plot(f_d, main = "ecdf for waiting time");lines(grid,low.cdf,col="red");lines(grid,up.cdf,col="red")
+### 90% confidence interval for mean
+mn <- mean(faithful$waiting)
+se <- sd(faithful$waiting)/sqrt(n)
+print(paste0("90% confidence interval for mean waiting time is [",
+             round(mn-1.64*se,2),", ", round(mn+1.64*se,2),"]"))
+### median waiting time
+summary(f_d)
+```
+Median waiting time is 70.
