@@ -1,0 +1,407 @@
+---
+title: "MA677_FinalProject_Stella LI"
+author: "Stella Li"
+date: "5/4/2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2); library(gridExtra)
+library(pwr)
+library(tidyverse);library(knitr)
+```
+  
+  
+### Statistics and the Law
+To examine whether banks deicriminate towards people of minority, I seperate the case of overall refusal rates ant the case of high income applicants refusal rates.  
+I checked the distribution of the 4 groups of refusal rate, and found that they are all approximatedly bell-shape. So I start with paired t-tests. The test statistics is  
+$t = \frac{\bar{d}}{SE(\bar{d})} = \frac{\bar{d}\times\sqrt{n}}{S_d}$  
+  
+1. Overall refusal rate  
+The null hypothesis is that there the means of refusal rates for minority applicants and for white applicants are equal.  
+```{r echo = FALSE}
+# refusal rate for minority applicants
+MN_r <- c(20.9,23.23,23.1,30.4,42.7,62.2,39.5,38.4,26.2,55.9,49.7,44.6,36.4,32,1.6,34.3,42.3,26.5,51.5, 47.2)
+# refusal rate for the white applicants
+WH_r <- c(3.7,5.5,6.7,9.0,13.9,20.6,13.4,13.2,9.3,21,20.1,19.1,16,16,5.6,18.4,23.3,15.6,32.4,29.7)
+MN_h <- c(21.4,8,11.3,17.3,38,33.3,33.6,29.5,21.7,39.1,36.6,28.6,32.9,21,5.8,24.2,38.3,27.3,41.3, 41.1)
+WH_h <- c(2.2,8,3.6,5.5,7.6,10.3,9.4,7.3,7.4,15.8,15.3,10.1,9.2,13,4.2,14.1,15,16.1,25.1,26.8)
+```
+
+```{r}
+d_r <- MN_r - WH_r # difference
+t_r <- mean(d_r)*sqrt(20)/sd(d_r) # t-statistics
+print(paste0("The test statistics is ",round(t_r,3)))
+print(paste0("p-value is ", 2*(1-pt(t_r, df = 19))))
+```
+The critical value for t-test with df = 19 at **95%** confidence interval is 2.093 and our observed t-statistics exceed the value. Therefore we can **reject** the null hypothesis that the difference of means of refusal rates among minority and white applicants are equal.  
+  
+2. Refusal rates for high income applicants  
+Similarly, I conducted the same analysis on refusal rates for high income applicants. The null hypothesis is the mean of refusal rates of high income white applicants and high income minority applicants are equal.  
+```{r}
+d_h <- MN_h - WH_h
+t_h <- mean(d_h)*sqrt(20)/sd(d_h)
+print(paste0("The test statistics is ", round(t_h,3)))
+print(paste("p-value is ", 2*(1-pt(t_h, df = 19))))
+```
+The critical value for t-test with df = 19 at **95%** confidence interval is 2.093 and our observed t-statistics exceed the value. Therefore we can **reject** the null hypothesis that the difference of means of refusal rates among high income minority and high income white applicants are equal.  
+  
+The analysis shows that the means of refusal rates for minority applicants and for white applicants are not equal, and the data provided sufficient evidence for the unequality. However, we need more information on applicants and their credit applications make statements about discrimination. For example, do minority applicants and white applicants have similar credit histories and debt ratios? Without more detailed information, the refusal rates themselves are not sufficient as evidence of discrimination.  
+  
+  
+### Comparing Suppliers
+I use chi-square test to test whether 
+```{r, fig.height=3}
+sch <- c("Area51", "BDV", "Giffen"); 
+count <- c(12,8,21,23,12,30,89,62,119)
+type <- c(rep("db",3), rep("da",3), rep("fa",3))
+q2data <- cbind(sch,count,type)
+q2data <- as.data.frame(q2data); q2data$count <- as.numeric(as.character(q2data$count))
+
+ggplot(q2data) + geom_bar(aes(sch, count, fill = type), width = .5, 
+                          stat = "identity", position = "fill") + 
+  coord_flip() + labs(y= "Percentage", x = "School") + 
+  scale_fill_discrete(labels = c("Dead Brid", "Display Art", "Flying Art"), 
+                      breaks = c("db", "da", "fa"))
+```
+  
+To test whether there is a relationship between school and quality of ornithopters, I use chi-square test.  
+```{r}
+q2data_w <- reshape(q2data, timevar = "type", idvar = "sch", direction = "wide")
+chisq.test(q2data_w[,-1])
+```  
+The p-value of the test is very large. Therefore, we **fail to reject** the null hypothesis that the school and quality of ornithopters are independent.  
+My conclusion is that the three schools produce abou the same quality.  
+  
+  
+### Deadly Sharks
+
+```{r echo=FALSE}
+q3data <- read.csv(file = "Final/sharkattack.csv")
+# clean data
+
+q3data_cleaned <- q3data %>%
+  select(Country.code, Activity, Fatal) %>%
+  filter(Country.code %in% c("US", "AU")) %>% # only care about shark attacks in US and AU
+  filter(Fatal != "UNKNOWN") %>% # exclude cases that we don't know whether it was fatal or not
+  group_by(Country.code, Activity, Fatal) %>%
+  summarise(count = n()) %>%
+  ungroup()
+```
+
+First, I use the overall number of events to check whether there is any association between attack being fatal and the country. The null hypothesis is that shark attack being fatal is independent with the country where the attack happended.  
+```{r echo = FALSE}
+fatal <- q3data_cleaned %>%
+  select(Country.code, Fatal, count) %>%
+  group_by(Country.code, Fatal) %>%
+  summarise(nEvents = sum(count)) %>%
+  spread(key = Fatal, value = nEvents)
+
+kable(fatal)
+q3test <- chisq.test(fatal[,-1], ); q3test
+```
+The chi-square test has a very small p-value. Therefore, we **reject** the hypothesis that shark attack being fatal is independent upon the country where it happened.  
+  
+Power Analysis:  
+First, calculate the observed effect size and then calculate power with pwr.chisq.test() function.  
+```{r}
+Xsq = sum(q3test$residuals^2)
+w = sqrt(Xsq/sum(fatal[,-1])) #effect size
+pwr.chisq.test(w = w, N = sum(fatal[,-1]), df = 1)
+```
+  
+  
+### Power Analysis
+  
+For two-sample proportion tests, when $n_1 = n_2 = n$, the power of test is:  
+$$1- \beta = \Phi(Z < Z_\alpha + \frac{p_2-p_1}{SE_{pooled}})$$  
+Where $$SE_{pooled} = \sqrt{\frac{2\bar{p}(1-\bar{p})}{n}}$$, $$\bar{p} = p_1 + p_2$$  
+
+Before the tranformation, when $d = p_1 - p_2$ is fixed, the power is a funtion of the standard error, therefore, when $p_1$ changes, the power will change. For example, the power to detect the difference between hypothetical parameters .65 and .45 is .48 when n = 46, while the power to detect the difference between hypothetical parameters .25 and .05 is .82, even though the difference between both pairs of values is .20  
+  
+By arcsine transform, the $\frac{p_2-p_1}{SE_{pooled}}$ is only related to n and the $h = \phi_1 - \phi_2$. Therefore, when h is fixed, the power will be the same regardless of $\phi_1$. The differences between arcsines are equally detectable.
+  
+Check it with a simulation. 
+```{r fig.height=3.5, fig.width= 4}
+set.seed(507)
+n <- 100
+phi1 <- runif(1000, min = 0, max = .7*pi)
+h <- .15*pi; phi2 <- phi1 + h # set h to be 0.15 * 3.14
+p1 <- sin(phi1/2)^2; p2 <- sin(phi2/2)^2; p_bar = (p1+p2)/2
+
+SE <- sqrt(2*p_bar*(1-p_bar)/n)
+Z <- (p1-p2)/SE
+ggplot() + geom_histogram(aes(Z), binwidth = .02)
+```
+  
+Most values are within the range of `r min(Z)` to `r summary(Z)[5]`. We accept that the transformation is good to use.  
+  
+When use the arsine transformation, first find the $\phi_1$ and $\phi_2$ corresponding to $p_1$ and $p_2$. Calculate $h = \phi_1 - \phi_2$ and then find the power based on n and h.   
+  
+  
+### Estimators
+1) MLE for Exponential  
+$$f(x) = \lambda e^{-\lambda x_i}$$
+$$L(\lambda|x_1,...x_n) = \prod_{i=1}^n \lambda e^{-\lambda x_i} = \lambda^n e^{-\lambda \sum x_i}$$
+$$log(L) = l(\lambda|x_1,...x_n) = \prod_{i=1}^n \lambda e^{-\lambda x_i} = nlog\lambda - \lambda \sum_{i=1}^n x_i$$  
+$$\frac{\Delta l}{\Delta \lambda} = \frac{n}{\lambda} - \sum_{i=1}^n x_i = 0$$  
+$$\Rightarrow \lambda = \frac{1}{n} \sum_{i=1}^n x_i$$
+  
+2) MoM and MLE for New Distribution  
+MoM  
+
+$$ f(x) = (1-\theta) + 2\theta x, \ \ \   0<x<1  $$
+
+$$First\ Moment:\   E(x) = \int_0^1 f(x) x\ dx = \int_0^1\ (1-\theta)x + 2\theta x^2\ dx$$  
+$$E(x) = \frac{1}{2}(1-\theta)x^2 |^1_0 + \frac{2}{3}\theta x^3|^1_0 \Rightarrow E(x) = \frac{1}{2}(1-\theta) + \frac{2}{3}\theta = \frac{1}{2} +\frac{1}{6}\theta = \bar{x}$$ 
+Therefore $$\theta = 6\bar{x}-3$$
+  
+  
+MLE  
+  
+$$ f(x) = (1-\theta) + 2\theta x, \ \ \   0<x<1 $$
+$$L(\theta|x_1, ... x_n) = \prod_i f(x)$$
+$$log(L) = l(\theta|x_1, ... x_n) = \sum_i log((1-\theta) + 2\theta x_i)$$
+$$\frac{\Delta l}{\Delta \lambda} = \sum_{i=1}^n \frac{2x_i-1}{1-\theta+2x_i\theta} = 0 $$
+Solve the above function then we can find the MLE for $\theta$  
+  
+  
+3) Rain in Southern Illinois  
+  
+Visualize the rainfall for each year:  
+```{r warning=FALSE, message=FALSE, echo=FALSE}
+library(fitdistrplus)
+
+r60 <- read.delim("Final/ill-60.txt", header = FALSE)
+r61 <- read.delim("Final/ill-61.txt", header = FALSE)
+r62 <- read.delim("Final/ill-62.txt", header = FALSE)
+r63 <- read.delim("Final/ill-63.txt", header = FALSE)
+r64 <- read.delim("Final/ill-64.txt", header = FALSE)
+
+draw <- function(x) {
+  p <- ggplot(data = x, aes(x = 1:nrow(x))) + geom_line(aes(y = cumsum(x$V1))) +
+    geom_bar(aes(y = x$V1 * 5), fill = "royalblue", stat = "identity")
+  p <- p +  scale_y_continuous(sec.axis = sec_axis(~.*.2, name = "Average Rainfall (inch)"))
+  p <- p + labs(y = "Cumulated Rainfall", x = "Index") + theme(legend.position = "none") +
+    xlim(0, 56) 
+  return(p)
+}
+
+p60 <- draw(r60);p61 <- draw(r61);p62 <- draw(r62);p63 <- draw(r63);p64 <- draw(r64)
+grid.arrange(p60,p61, p62, p63, p64, ncol = 3, nrow = 2)
+```
+  
+In each plot, the bars represent the average rainfall for each time (y-axis on the right), and the line shows the cumulated rainfall for the year (y-axis on the left). In year 1961, there were most cumulated rainfall but the number of events of rain were not the most. The plots also show that there were less rain and cumulated rainfall in year 1963 and 1964.  
+  
+I ran ks.test to test whether the rainfall data from each year can be seen as from the same distribution. The table shows the p values of these pair-wise ks.test results. Based on the results, we **fail to reject** the null hypothesis that rainfalls in different years were drawn from the same continuous distribution. THerefore, in the following analysis, I pooled all data together.     
+```{r distribution, warning=FALSE}
+c <- rep(0,5); p <- cbind("yr60"=c,"yr61"=c,"yr62"=c,"yr63"=c,"yr64"=c)
+q5data <- list(r60$V1, r61$V1, r62$V1, r63$V1, r64$V1)
+for(i in 1:5){
+  for(j in (i+1):5){
+    if(j>5) break
+    s <- ks.test(q5data[[i]], q5data[[j]])
+    p[i,j] <- round(s$p.value, 3)
+  }
+}
+kable(p)
+```
+  
+Explore possible distributions with CUllen and Frey graph.    
+```{r fit a distribution, warning=FALSE}
+q5data_all <- unlist(q5data)
+descdist(q5data_all,obs.col = "pink")
+```
+  
+I tried to fit three distributions. Based on **BIC**, it seems that log-normal distribution is the best.    
+```{r}
+fit_gm <- fitdist(q5data_all, "gamma", method = "mle")
+fit_ln <- fitdist(q5data_all, "lnorm", method = "mle")
+fit_ex <- fitdist(q5data_all, "exp", method = "mle")
+```
+  
+```{r echo=FALSE}
+paste("The BIC of gamma distribution (MLE) ", round(fit_gm$bic,3))
+paste("The BIC of log-normal distribution (MLE) ", round(fit_ln$bic,3))
+paste("The BIC of exponential distribution (MLE) ", round(fit_ex$bic,3))
+```
+  
+The parameters calculated by the algorithm are:    
+```{r gamma, warning=FALSE, echo=FALSE}
+fit_gm2 <- fitdist(q5data_all, "gamma", method = "mme")
+paste("The BIC of gamma distribution ", round(fit_gm2$bic,3))
+paste("The estimated parameters with MLE ", fit_gm$estimate)
+paste("The estimated parameters with Method of Moment ",fit_gm2$estimate)
+```
+  
+MLE method:  
+Gamma distribution  $$L(\alpha, \beta|x_1,...x_n) = \prod_i  f(x) = \prod_i  \frac{\beta^{\alpha}}{\Gamma(\alpha)}x_i^{\alpha -1}e^{-\beta x_i}$$   
+$$\Rightarrow\ \ l= log(L) = n(\alpha log(\beta)-log(\Gamma(\alpha)))+(\alpha-1)\sum_i^n logx_i -\beta \sum_i^nx_i$$
+$$\frac{\partial}{\partial \alpha}log(L) = n(log\beta - \frac{d\ log(\Gamma(\alpha))}{d\ \alpha})+\sum_i^nlogx_i = n \frac{\alpha}{\beta}-\sum_i^nx_i = 0 \ \Rightarrow \beta = \frac{\alpha}{\bar{x}}\ \ \ \ \ \ (2)$$
+Substitute $\beta = \frac{\alpha}{\bar{x}}$ back to equation (1)  
+$$\Rightarrow \ n(log\alpha-log(\bar{x}) - \frac{d\ log(\Gamma(\alpha))}{d\ \alpha}+\bar{logx})=0$$
+```{r}
+f <- function(a, x){
+  log(a)-log(mean(x)) - digamma(a) + mean(log(x))
+}
+a <- uniroot(f, interval = c(.35,.45), q5data_all)$root
+b <- a/mean(q5data_all)
+paste("The estimated shape parameter = ", round(a, 4), " and the estimated rate parameter = ", round(b,4))
+```
+  
+Method of Moments:  
+For Gamma distribution, the mgf:  
+$$(1-\frac{t}{\beta})^{-\alpha}$$  
+$$\Rightarrow \ \mu_1 = E(X) =M'_x(t=0) = \frac{\alpha}{\beta}$$  
+$$\Rightarrow \ \mu_2 = E(X^2) = M^{''}_x(t=0) = \frac{\alpha(\alpha+1)}{\beta^2}$$  
+Since $Var(X) = E(X^2)\ -(E(X)^2) = \mu_2 - \mu_1^2$, we get  
+$$\alpha = \frac{\mu_1^2}{\mu_2-\mu_1^2} = \frac{\bar{x}^2}{\sigma^2}$$  and $$\beta = \frac{\bar{x}}{\sigma^2}$$  
+  
+```{r}
+s <- sd(q5data_all)
+m <- mean(q5data_all)
+a <- m^2/(s^2)
+b <- m/(s^2)
+paste("The estimated shape parameter = ", round(a, 4), " and the estimated rate parameter = ", round(b,4))
+```
+  
+ Bootstrapping  
+  
+I ran the fitting 1000 times, and plot the distribution of the parameters.    
+```{r warning=FALSE, echo = FALSE}
+nboot <- 1000
+set.seed(2668)
+a_star_mle <- double(nboot); a_star_mom <- double(nboot)
+b_star_mle <- double(nboot); b_star_mom <- double(nboot)
+for(i in 1:nboot){
+  x <- sample(q5data_all, replace = TRUE)
+  fit_mle <- fitdist(x, "gamma", method = "mle")
+  fit_mom <- fitdist(x, "gamma", method = "mme")
+  a_star_mle[i] <- fit_mle$estimate[1]; b_star_mle[i] <- fit_mle$estimate[2]
+  a_star_mom[i] <- fit_mom$estimate[1]; b_star_mom[i] <- fit_mom$estimate[2]
+}
+p1 <- ggplot() + geom_histogram(aes(a_star_mle), binwidth = 0.005, fill = "pink") + 
+  geom_vline(aes(xintercept = mean(a_star_mle))) + 
+  geom_vline(aes(xintercept = mean(a_star_mle)+sd(a_star_mle)), colour = "grey45", linetype = "dashed") + 
+  geom_vline(aes(xintercept = mean(a_star_mle)-sd(a_star_mle)), colour = "grey45", linetype = "dashed") + xlim(.25, .60)
+
+p2 <- ggplot() + geom_histogram(aes(a_star_mom), binwidth = 0.005, fill = "pink") + 
+  geom_vline(aes(xintercept = mean(a_star_mom))) + 
+  geom_vline(aes(xintercept = mean(a_star_mom)+sd(a_star_mom)), colour = "grey45", linetype = "dashed") + 
+  geom_vline(aes(xintercept = mean(a_star_mom)-sd(a_star_mom)), colour = "grey45", linetype = "dashed") + xlim(.25, .60)
+
+p3 <- ggplot() + geom_histogram(aes(b_star_mle), binwidth = 0.05, fill = "pink") + 
+  geom_vline(aes(xintercept = mean(b_star_mle))) + 
+  geom_vline(aes(xintercept = mean(b_star_mle)+sd(b_star_mle)), colour = "grey45", linetype = "dashed") + 
+  geom_vline(aes(xintercept = mean(b_star_mle)-sd(b_star_mle)), colour = "grey45", linetype = "dashed") + xlim(.8, 3.2)
+
+p4 <- ggplot() + geom_histogram(aes(b_star_mom), binwidth = 0.05, fill = "pink") + 
+  geom_vline(aes(xintercept = mean(b_star_mom))) + 
+  geom_vline(aes(xintercept = mean(b_star_mom)+sd(b_star_mom)), colour = "grey45", linetype = "dashed") + 
+  geom_vline(aes(xintercept = mean(b_star_mom)-sd(b_star_mom)), colour = "grey45", linetype = "dashed") + xlim(.8, 3.2)
+
+grid.arrange(p1,p2,p3,p4, ncol = 2, nrow = 2)
+```
+  
+The solid line shows the mean and dashed lines show the one-sigma range. Based on the plots, I would present MLE, as the variance of estimated parameters are smaller.  
+  
+  
+### Decision Theory Analysis
+  
+Proof of equations 10(a), 10(b) and 10(c)  
+  
+From equation 9(a), 9(b) and 9(c), we know that the $\delta(n)$ depends on the number of success in the innovative treatment group comparing with a threshold $n_0$.  
+$$\delta(n) = 0 \ for \ n<n_0 \qquad (9a)$$
+$$\delta(n) = \lambda \ for \ n=n_0 \qquad (9b)$$
+$$\delta(n) = 1 \ for \ n>n_0 \qquad (9c)$$
+Essentially, we are comparing the success probability for status quo treatment group ($\alpha$) and innovative group ($\beta$). Divide each side of the 9a, 9b and 9c by number of patients got assigned to innovative treatment group, we get   
+$$\delta(n) = 0 \ for \ \frac{n}{N} = \beta< \frac{n_0}{N}= \alpha \qquad (9a.1)$$
+$$\delta(n) = \lambda \ for \ \frac{n}{N} = \beta = \frac{n_0}{N}= \alpha \qquad (9b.1)$$
+$$\delta(n) = 1 \ for \ \frac{n}{N} = \beta> \frac{n_0}{N}= \alpha \qquad (9c.1)$$
+ 
+Since the posterior mean for $\beta$ is $(c+n)/(c+d+N)$, with Bayes rules, substitude the $\beta$ with the posterior format, the three equations above is  
+$$\delta(n) = 0 \ for \ \frac{c+n}{c+d+N} = \beta< \frac{n_0}{N}= \alpha \qquad (10a.1)$$  
+$$\delta(n) = \lambda \ for \ \frac{c+n}{c+d+N} = \beta= \frac{n_0}{N}= \alpha \qquad (10b.1)$$  
+$$\delta(n) = 1 \ for \ \frac{c+n}{c+d+N} = \beta> \frac{n_0}{N}= \alpha \qquad (10c.1)$$  
+Thus, we get the final three equations:  
+$$\delta(n) = 0 \ for \ \frac{c+n}{c+d+N} < \alpha \qquad (10a)$$
+$$\delta(n) = \lambda \ for \ \frac{c+n}{c+d+N} = \alpha \qquad (10a)$$
+$$\delta(n) = 1 \ for \ \frac{c+n}{c+d+N} > \alpha \qquad (10a)$$
+  
+Reproduce the table  
+
+```{r}
+# read in the threshold sample size table
+n_0_table <- read.csv(file = "Final/Manski.csv", nrows = 6, row.names = 1)
+n_0_table <- n_0_table[-1, ]
+
+# read in the threshold allocation table
+lambda_table <- read.csv(file = "Final/Manski.csv", nrows = 5, row.names = 1, skip = 7)
+colnames(lambda_table) <- colnames(n_0_table)
+```
+
+In experiments, the planner knows the success probability of the status quo treatment group but not the innovative group. THe palnner wants to chooose treatments to maximize the success probability.  
+  
+I wrote several functions to find out the $\delta(n)$, expected allocation of patients to treatment B $E[\delta(n)]$, $\beta_s$ based on the selected $\alpha$, N and all possible state s. Then I calculate the minimax-regret of rule $\delta$.    
+```{r}
+# find delta_n
+delta <- function(n, n_0, lambda){
+  d <- ifelse(n<n_0, 0, ifelse(n>n_0, 1, lambda))
+  return(d)
+}
+# find f(n=i;beta, N)
+f <- function(i, s, N){
+  if(N==0) beta <- 0 else beta <- s/N 
+  f_i <- factorial(N)/(factorial(i)*factorial(N-i))*beta^i*(1-beta)^(N-i)
+  return(f_i)
+}
+
+# calculate E(delta(n))
+Exp_d <- function(s, n_0, lambda, N){
+  E <- 0
+  for(i in 0:N){
+    E <- E + delta(i, n_0, lambda)*f(i, s, N)
+  }
+  return(E)
+}
+
+# regret of rule delta in state s is
+RegretRule <- function(alpha, s, n_0, N, lambda){
+  if(N==0) beta_s <- 0 else beta_s <- s/N
+  rr <- (beta_s-alpha)*(1-Exp_d(s, n_0, lambda, N))*I(beta_s >= alpha) +
+    (alpha - beta_s)*Exp_d(s, n_0, lambda, N)*I(beta_s <= alpha)
+  return(rr)
+}
+
+minimax <- function(alpha, n_0, N, lambda){
+  l <- double(N+1)
+  for(s in 0:N){
+    l[s+1] <- RegretRule(alpha, s, n_0, N, lambda)
+  }
+  if(n_0 < N) {
+    if(max(l[(n_0+2):(N+1)])==0) m <- max(l[1:(n_0+1)])
+    else m <- min(max(l[1:(n_0+1)]), max(l[(n_0+2):(N+1)]))
+  }
+  else m <- max(l[1:(N+1)])
+  return(m)
+}
+
+regret <- as.data.frame(matrix(rep(0, 55), nrow = 5, ncol = 11))
+colnames(regret) <- paste0("N=", 0:10)
+a = c(.1, .25, .5, .75, .9)
+for(x in 1:5){
+  for(y in  1:11){
+    alpha = a[x]; N = y-1
+    n_0 <- n_0_table[x,y]; lambda <- lambda_table[x,y]
+    regret[x,y] <- round(minimax(alpha, n_0, N, lambda), 3)
+  }
+}
+
+kable(regret)
+```
+  
+  
+  
